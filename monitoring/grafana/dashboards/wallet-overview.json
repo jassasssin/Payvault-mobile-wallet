@@ -1,0 +1,126 @@
+{
+  "title": "PayVault Wallet Overview",
+  "uid": "payvault-overview",
+  "timezone": "Asia/Kolkata",
+  "refresh": "30s",
+  "schemaVersion": 38,
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Active Users",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "expr": "wallet_active_users_total"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Total Balance (INR)",
+      "gridPos": {
+        "x": 6,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "expr": "wallet_total_balance_inr"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyINR"
+        }
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Fraud Flags 5m",
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "expr": "increase(wallet_transactions_total{status='blocked_fraud'}[5m])"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "HTTP Requests/s",
+      "gridPos": {
+        "x": 0,
+        "y": 4,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "rate(wallet_http_requests_total{status=~'2..'}[1m])",
+          "legendFormat": "2xx"
+        },
+        {
+          "expr": "rate(wallet_http_requests_total{status=~'5..'}[1m])",
+          "legendFormat": "5xx"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "API Latency p95",
+      "gridPos": {
+        "x": 12,
+        "y": 4,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95,rate(wallet_http_request_duration_seconds_bucket[5m]))",
+          "legendFormat": "p95 latency"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        }
+      }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Transaction Volume INR/min",
+      "gridPos": {
+        "x": 0,
+        "y": 12,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "rate(wallet_transaction_amount_inr_sum{type='debit'}[1m])*60",
+          "legendFormat": "Debit"
+        },
+        {
+          "expr": "rate(wallet_transaction_amount_inr_sum{type='credit'}[1m])*60",
+          "legendFormat": "Credit"
+        }
+      ]
+    }
+  ]
+}

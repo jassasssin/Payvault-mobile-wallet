@@ -1,0 +1,74 @@
+# ─── NetworkPolicy – Zero-trust pod-to-pod traffic ───────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: wallet-backend-netpol
+  namespace: wallet
+spec:
+  podSelector:
+    matchLabels:
+      app: wallet-backend
+  policyTypes: [Ingress, Egress]
+  ingress:
+    # Allow from ingress controller only
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - port: 8000
+    # Allow Prometheus scraping
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - port: 8000
+  egress:
+    # Allow DNS
+    - ports: [{ port: 53, protocol: UDP }]
+    # Allow notification service
+    - to:
+        - podSelector:
+            matchLabels:
+              app: wallet-notification
+      ports: [{ port: 8001 }]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: wallet-frontend-netpol
+  namespace: wallet
+spec:
+  podSelector:
+    matchLabels:
+      app: wallet-frontend
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports: [{ port: 80 }]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: wallet-notification-netpol
+  namespace: wallet
+spec:
+  podSelector:
+    matchLabels:
+      app: wallet-notification
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: wallet-backend
+      ports: [{ port: 8001 }]
+  egress:
+    - ports: [{ port: 53, protocol: UDP }]
+    # Allow SMTP outbound
+    - ports: [{ port: 587 }]
+    - ports: [{ port: 465 }]

@@ -1,0 +1,56 @@
+groups:
+  - name: payvault_alerts
+    rules:
+
+      - alert: WalletBackendDown
+        expr: up{job="wallet-backend"} == 0
+        for: 1m
+        labels: { severity: critical }
+        annotations:
+          summary: "Wallet backend is DOWN"
+          description: "Backend unreachable for > 1 minute."
+
+      - alert: HighErrorRate
+        expr: |
+          rate(wallet_http_requests_total{status=~"5.."}[5m])
+          / rate(wallet_http_requests_total[5m]) > 0.05
+        for: 2m
+        labels: { severity: warning }
+        annotations:
+          summary: "Error rate > 5%"
+          description: "5xx rate is {{ $value | humanizePercentage }}."
+
+      - alert: HighAPILatency
+        expr: |
+          histogram_quantile(0.95,
+            rate(wallet_http_request_duration_seconds_bucket[5m])
+          ) > 2
+        for: 3m
+        labels: { severity: warning }
+        annotations:
+          summary: "p95 API latency > 2s"
+          description: "95th percentile latency is {{ $value }}s."
+
+      - alert: FraudSpike
+        expr: |
+          increase(wallet_transactions_total{status="blocked_fraud"}[5m]) > 5
+        labels: { severity: critical }
+        annotations:
+          summary: "Fraud spike detected"
+          description: "More than 5 transactions blocked for fraud in 5 minutes."
+
+      - alert: PodRestartLoop
+        expr: |
+          increase(kube_pod_container_status_restarts_total{namespace="wallet"}[15m]) > 3
+        labels: { severity: critical }
+        annotations:
+          summary: "Pod {{ $labels.pod }} restart loop"
+          description: "Restarted more than 3 times in 15 minutes."
+
+      - alert: NotificationServiceDown
+        expr: up{job="wallet-notification"} == 0
+        for: 2m
+        labels: { severity: warning }
+        annotations:
+          summary: "Notification service is DOWN"
+          description: "Users will not receive transaction alerts."

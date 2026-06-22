@@ -1,0 +1,276 @@
+// ─── PayVault – Production Jenkinsfile ───────────────────────────────────────
+// Pipeline fails on: test failure, HIGH Bandit findings, CRITICAL CVEs,
+// Trivy scan failures, failed Terraform plan, or failed K8s rollout.
+
+pipeline {
+    agent any
+
+    environment {
+        APP_NAME            = 'payvault'
+        DOCKERHUB_USER      = credentials('dockerhub-username')
+        IMAGE_BACKEND       = "${DOCKERHUB_USER}/${APP_NAME}-backend"
+        IMAGE_FRONTEND      = "${DOCKERHUB_USER}/${APP_NAME}-frontend"
+        IMAGE_NOTIFICATION  = "${DOCKERHUB_USER}/${APP_NAME}-notification"
+        IMAGE_TAG           = "${GIT_COMMIT[0..7]}"
+        KUBE_NAMESPACE      = 'wallet'
+        AWS_REGION          = 'ap-south-1'
+        EKS_CLUSTER         = 'wallet-eks-cluster'
+    }
+
+    options {
+        timestamps()
+        timeout(time: 45, unit: 'MINUTES')
+        disableConcurrentBuilds()
+        buildDiscarder(logRotator(numToKeepStr: '10'))
+        ansiColor('xterm')
+    }
+
+    stages {
+
+        stage('Checkout') {
+            steps {
+                checkout scm
+                sh 'git log --oneline -3'
+                echo "Branch: ${GIT_BRANCH} | Commit: ${IMAGE_TAG}"
+            }
+        }
+
+        stage('Unit Tests') {
+            steps {
+                sh '''
+                    python3 -m pip install -r app/backend/requirements.txt pytest httpx --quiet
+                    DB_PATH=./test_wallet.db python3 -m pytest app/backend/tests/ \
+                        -v --tb=short --junitxml=test-results.xml
+                '''
+            }
+            post {
+                always { junit 'test-results.xml' }
+                failure { error "Unit tests failed – aborting pipeline" }
+            }
+        }
+
+        stage('Security Scans') {
+            parallel {
+                stage('SAST – Bandit') {
+                    steps {
+                        sh '''
+                            pip3 install bandit --quiet
+                            bandit -r app/backend/main.py app/notification-service/main.py \
+                                -f json -o bandit-report.json
+                        '''
+                        script {
+                            def report = readJSON file: 'bandit-report.json'
+                            def highIssues = report.results.findAll { it.issue_severity == 'HIGH' }
+                            if (highIssues.size() > 0) {
+                                error "Bandit found ${highIssues.size()} HIGH severity issue(s) – build blocked"
+                            }
+                            echo "Bandit: ${report.results.size()} total issues, 0 HIGH – PASSED"
+                        }
+                    }
+                    post {
+                        always { archiveArtifacts 'bandit-report.json' }
+                    }
+                }
+                stage('Lint – Dockerfiles') {
+                    steps {
+                        sh '''
+                            docker run --rm -i hadolint/hadolint < docker/Dockerfile.backend
+                            docker run --rm -i hadolint/hadolint < docker/Dockerfile.notification
+                        '''
+                    }
+                }
+                stage('Dependency Audit') {
+                    steps {
+                        sh '''
+                            pip3 install pip-audit --quiet
+                            pip-audit -r app/backend/requirements.txt --format json -o pip-audit.json || true
+                            cat pip-audit.json
+                        '''
+                    }
+                    post { always { archiveArtifacts 'pip-audit.json' } }
+                }
+            }
+        }
+
+        stage('Build Images') {
+            steps {
+                sh """
+                    docker build -f docker/Dockerfile.backend \
+                        -t ${IMAGE_BACKEND}:${IMAGE_TAG} \
+                        -t ${IMAGE_BACKEND}:latest \
+                        --build-arg BUILD_DATE=\$(date -u +%Y-%m-%dT%H:%M:%SZ) \
+                        --build-arg GIT_COMMIT=${GIT_COMMIT} .
+
+                    docker build -f docker/Dockerfile.frontend \
+                        -t ${IMAGE_FRONTEND}:${IMAGE_TAG} \
+                        -t ${IMAGE_FRONTEND}:latest .
+
+                    docker build -f docker/Dockerfile.notification \
+                        -t ${IMAGE_NOTIFICATION}:${IMAGE_TAG} \
+                        -t ${IMAGE_NOTIFICATION}:latest .
+                """
+            }
+        }
+
+        stage('Trivy CVE Scan') {
+            steps {
+                script {
+                    def images = ["${IMAGE_BACKEND}:${IMAGE_TAG}", "${IMAGE_NOTIFICATION}:${IMAGE_TAG}"]
+                    images.each { img ->
+                        def result = sh(
+                            script: """
+                                docker run --rm \
+                                    -v /var/run/docker.sock:/var/run/docker.sock \
+                                    aquasec/trivy:latest image \
+                                    --exit-code 1 \
+                                    --severity CRITICAL \
+                                    --ignore-unfixed \
+                                    --format table \
+                                    ${img}
+                            """,
+                            returnStatus: true
+                        )
+                        if (result != 0) {
+                            error "Trivy found CRITICAL CVEs in ${img} – build blocked"
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('Push to Registry') {
+            when {
+                anyOf {
+                    branch 'main'
+                    branch 'develop'
+                    tag pattern: "v\\d+\\.\\d+\\.\\d+", comparator: "REGEXP"
+                }
+            }
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: 'dockerhub-creds',
+                    usernameVariable: 'DH_USER',
+                    passwordVariable: 'DH_PASS'
+                )]) {
+                    sh """
+                        echo "\$DH_PASS" | docker login -u "\$DH_USER" --password-stdin
+                        docker push ${IMAGE_BACKEND}:${IMAGE_TAG}
+                        docker push ${IMAGE_BACKEND}:latest
+                        docker push ${IMAGE_FRONTEND}:${IMAGE_TAG}
+                        docker push ${IMAGE_FRONTEND}:latest
+                        docker push ${IMAGE_NOTIFICATION}:${IMAGE_TAG}
+                        docker push ${IMAGE_NOTIFICATION}:latest
+                    """
+                }
+            }
+        }
+
+        stage('Terraform Plan') {
+            when { branch 'main' }
+            steps {
+                withCredentials([[
+                    $class: 'AmazonWebServicesCredentialsBinding',
+                    credentialsId: 'aws-credentials'
+                ]]) {
+                    sh '''
+                        cd terraform
+                        terraform init \
+                            -backend-config="bucket=payvault-tfstate" \
+                            -backend-config="region=ap-south-1" \
+                            -reconfigure
+                        terraform validate
+                        terraform plan -var-file="environments/prod.tfvars" -out=tfplan
+                        terraform show -no-color tfplan > tfplan.txt
+                    '''
+                }
+            }
+            post {
+                always { archiveArtifacts artifacts: 'terraform/tfplan.txt', allowEmptyArchive: true }
+            }
+        }
+
+        stage('Terraform Apply') {
+            when { branch 'main' }
+            input {
+                message "Apply Terraform changes to PRODUCTION?"
+                ok "Yes, apply"
+            }
+            steps {
+                withCredentials([[
+                    $class: 'AmazonWebServicesCredentialsBinding',
+                    credentialsId: 'aws-credentials'
+                ]]) {
+                    sh 'cd terraform && terraform apply -auto-approve tfplan'
+                }
+            }
+        }
+
+        stage('Deploy to EKS') {
+            when { branch 'main' }
+            steps {
+                withCredentials([[
+                    $class: 'AmazonWebServicesCredentialsBinding',
+                    credentialsId: 'aws-credentials'
+                ]]) {
+                    sh """
+                        aws eks update-kubeconfig \
+                            --region ${AWS_REGION} \
+                            --name ${EKS_CLUSTER}
+
+                        sed -i 's|IMAGE_TAG_PLACEHOLDER|${IMAGE_TAG}|g' kubernetes/*.yaml
+
+                        kubectl apply -f kubernetes/namespace.yaml
+                        kubectl apply -f kubernetes/configmap.yaml
+                        kubectl apply -f kubernetes/secrets.yaml
+                        kubectl apply -f kubernetes/network-policy.yaml
+                        kubectl apply -f kubernetes/pdb.yaml
+                        kubectl apply -f kubernetes/backend-deployment.yaml
+                        kubectl apply -f kubernetes/frontend-deployment.yaml
+                        kubectl apply -f kubernetes/notification-deployment.yaml
+                        kubectl apply -f kubernetes/services.yaml
+                        kubectl apply -f kubernetes/ingress.yaml
+                        kubectl apply -f kubernetes/hpa.yaml
+
+                        kubectl rollout status deployment/wallet-backend \
+                            -n ${KUBE_NAMESPACE} --timeout=180s
+                        kubectl rollout status deployment/wallet-frontend \
+                            -n ${KUBE_NAMESPACE} --timeout=120s
+                        kubectl rollout status deployment/wallet-notification \
+                            -n ${KUBE_NAMESPACE} --timeout=60s
+                    """
+                }
+            }
+        }
+
+        stage('Smoke Test') {
+            when { branch 'main' }
+            steps {
+                sh '''
+                    sleep 20
+                    LB=$(kubectl get ingress wallet-ingress -n wallet \
+                        -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || echo "")
+                    if [ -n "$LB" ]; then
+                        curl -sf "http://${LB}/health" | python3 -c \
+                            "import json,sys; d=json.load(sys.stdin); sys.exit(0 if d['status']=='healthy' else 1)"
+                        echo "Smoke test PASSED"
+                    else
+                        echo "LB not ready yet – skipping smoke test"
+                    fi
+                '''
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "✅ Pipeline SUCCESS – ${APP_NAME}:${IMAGE_TAG} deployed"
+        }
+        failure {
+            echo "❌ Pipeline FAILED on branch ${GIT_BRANCH}"
+        }
+        always {
+            sh 'docker image prune -f --filter "dangling=true" || true'
+            cleanWs()
+        }
+    }
+}

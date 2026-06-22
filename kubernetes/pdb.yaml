@@ -1,0 +1,22 @@
+# ─── PodDisruptionBudget – ensures HA during node drains ─────────────────────
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: wallet-backend-pdb
+  namespace: wallet
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: wallet-backend
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: wallet-frontend-pdb
+  namespace: wallet
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: wallet-frontend

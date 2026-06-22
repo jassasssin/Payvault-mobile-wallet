@@ -1,0 +1,9 @@
+# ─── Kubernetes Namespace ────────────────────────────────────────────────────
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: wallet
+  labels:
+    app: mobile-wallet
+    environment: production
+    project: sem4-devops

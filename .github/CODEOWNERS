@@ -1,0 +1,14 @@
+# Global owners – all PRs require review from one of these
+* @devops-lead @backend-lead
+
+# Backend
+/app/backend/         @backend-lead
+/app/notification-service/ @backend-lead
+
+# Infrastructure
+/terraform/           @devops-lead
+/kubernetes/          @devops-lead
+/docker/              @devops-lead
+
+# Security
+/vault/               @security-lead

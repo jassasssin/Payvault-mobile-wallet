@@ -1,0 +1,31 @@
+global:
+  smtp_smarthost: 'smtp.gmail.com:587'
+  smtp_from: 'alerts@payvault.com'
+  smtp_auth_username: '{{ SMTP_USER }}'
+  smtp_auth_password: '{{ SMTP_PASS }}'
+
+route:
+  group_by: ['alertname', 'severity']
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  receiver: 'email-alerts'
+  routes:
+    - match: { severity: critical }
+      receiver: 'email-alerts'
+      repeat_interval: 1h
+    - match: { alertname: FraudSpike }
+      receiver: 'email-alerts'
+      repeat_interval: 15m
+
+receivers:
+  - name: 'email-alerts'
+    email_configs:
+      - to: 'devops@payvault.com'
+        send_resolved: true
+        html: |
+          <h3>{{ .Status | toUpper }} – {{ .CommonLabels.alertname }}</h3>
+          {{ range .Alerts }}
+          <p><b>Summary:</b> {{ .Annotations.summary }}</p>
+          <p><b>Description:</b> {{ .Annotations.description }}</p>
+          {{ end }}

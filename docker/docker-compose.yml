@@ -1,0 +1,167 @@
+version: "3.9"
+# ─── Mobile Wallet Ecosystem – Full Local Stack ───────────────────────────────
+# Usage:
+#   cp .env.example .env   # fill in secrets
+#   docker-compose up -d
+#   docker-compose logs -f backend
+
+networks:
+  wallet-net:
+    driver: bridge
+
+volumes:
+  wallet-data:
+  prometheus-data:
+  grafana-data:
+  elasticsearch-data:
+
+services:
+
+  # ── 1. Backend API ────────────────────────────────────────────────────────
+  backend:
+    build: { context: .., dockerfile: docker/Dockerfile.backend }
+    container_name: wallet-backend
+    ports: ["8000:8000"]
+    environment:
+      JWT_SECRET:       ${JWT_SECRET:-change-me-in-prod}
+      DB_PATH:          /app/data/wallet.db
+      APP_ENV:          ${APP_ENV:-development}
+      TOKEN_TTL_MINUTES: "60"
+      ALLOWED_ORIGINS:  ${ALLOWED_ORIGINS:-*}
+      LOGSTASH_HOST:    logstash
+      LOGSTASH_PORT:    "5000"
+    volumes: [wallet-data:/app/data]
+    networks: [wallet-net]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD","python","-c","import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  # ── 2. Frontend UI ────────────────────────────────────────────────────────
+  frontend:
+    build: { context: .., dockerfile: docker/Dockerfile.frontend }
+    container_name: wallet-frontend
+    ports: ["3000:80"]
+    depends_on:
+      backend: { condition: service_healthy }
+    networks: [wallet-net]
+    restart: unless-stopped
+
+  # ── 3. Notification Service ───────────────────────────────────────────────
+  notification:
+    build: { context: .., dockerfile: docker/Dockerfile.notification }
+    container_name: wallet-notification
+    ports: ["8001:8001"]
+    environment:
+      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      FROM_EMAIL: ${FROM_EMAIL:-noreply@payvault.com}
+    networks: [wallet-net]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD","python","-c","import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ── 4. Prometheus ─────────────────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    container_name: wallet-prometheus
+    ports: ["9090:9090"]
+    volumes:
+      - ../monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ../monitoring/prometheus/alert_rules.yml:/etc/prometheus/alert_rules.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.retention.time=15d'
+      - '--web.enable-lifecycle'
+    networks: [wallet-net]
+    restart: unless-stopped
+
+  # ── 5. Alertmanager ───────────────────────────────────────────────────────
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: wallet-alertmanager
+    ports: ["9093:9093"]
+    volumes:
+      - ../monitoring/prometheus/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    networks: [wallet-net]
+    restart: unless-stopped
+
+  # ── 6. Grafana ────────────────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:10.4.0
+    container_name: wallet-grafana
+    ports: ["3001:3000"]
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin123}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SECURITY_DISABLE_GRAVATAR: "true"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ../monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ../monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on: [prometheus]
+    networks: [wallet-net]
+    restart: unless-stopped
+
+  # ── 7. Elasticsearch ──────────────────────────────────────────────────────
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.13.0
+    container_name: wallet-elasticsearch
+    environment:
+      discovery.type: single-node
+      ES_JAVA_OPTS: "-Xms512m -Xmx512m"
+      xpack.security.enabled: "false"
+    ports: ["9200:9200"]
+    volumes: [elasticsearch-data:/usr/share/elasticsearch/data]
+    networks: [wallet-net]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD","curl","-f","http://localhost:9200/_cluster/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # ── 8. Logstash ───────────────────────────────────────────────────────────
+  logstash:
+    image: docker.elastic.co/logstash/logstash:8.13.0
+    container_name: wallet-logstash
+    volumes:
+      - ../monitoring/elk/logstash.conf:/usr/share/logstash/pipeline/logstash.conf:ro
+    depends_on:
+      elasticsearch: { condition: service_healthy }
+    networks: [wallet-net]
+    restart: unless-stopped
+
+  # ── 9. Kibana ─────────────────────────────────────────────────────────────
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.13.0
+    container_name: wallet-kibana
+    ports: ["5601:5601"]
+    environment:
+      ELASTICSEARCH_HOSTS: http://elasticsearch:9200
+    depends_on:
+      elasticsearch: { condition: service_healthy }
+    networks: [wallet-net]
+    restart: unless-stopped
+
+  # ── 10. HashiCorp Vault ───────────────────────────────────────────────────
+  vault:
+    image: hashicorp/vault:1.16
+    container_name: wallet-vault
+    ports: ["8200:8200"]
+    environment:
+      VAULT_DEV_ROOT_TOKEN_ID: ${VAULT_TOKEN:-root-dev-token}
+      VAULT_DEV_LISTEN_ADDRESS: "0.0.0.0:8200"
+    cap_add: [IPC_LOCK]
+    networks: [wallet-net]
+    restart: unless-stopped

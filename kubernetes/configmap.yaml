@@ -1,0 +1,12 @@
+# ─── ConfigMap – Non-sensitive app config ────────────────────────────────────
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: wallet-config
+  namespace: wallet
+data:
+  DB_PATH: "/app/data/wallet.db"
+  LOG_LEVEL: "INFO"
+  APP_ENV: "production"
+  MAX_TRANSFER_AMOUNT: "50000"
+  FRAUD_THRESHOLD: "0.8"

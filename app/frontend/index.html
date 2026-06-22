@@ -1,0 +1,626 @@
+\<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>PayVault – Enterprise Wallet Console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#080c14;--bg2:#0d1220;
+  --glass:rgba(255,255,255,0.04);--glass2:rgba(255,255,255,0.07);
+  --border:rgba(255,255,255,0.08);--border2:rgba(255,255,255,0.14);
+  --text:#f0f4ff;--muted:#8892a4;--dim:#4a5568;
+  --blue:#3b82f6;--blue2:#60a5fa;
+  --green:#10b981;--green2:#34d399;
+  --amber:#f59e0b;--red:#ef4444;--purple:#8b5cf6;--cyan:#06b6d4;
+  --mono:'JetBrains Mono',monospace;--sans:'Inter',sans-serif;
+}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13px;line-height:1.5;overflow-x:hidden}
+
+@keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+@keyframes lineGrow{from{stroke-dashoffset:2000}to{stroke-dashoffset:0}}
+@keyframes barGrow{from{transform:scaleY(0)}to{transform:scaleY(1)}}
+@keyframes slideIn{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:translateX(0)}}
+
+/* ── Layout ── */
+.app{display:flex;flex-direction:column;min-height:100vh}
+
+/* ── Topbar ── */
+.topbar{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 28px;height:56px;
+  background:rgba(8,12,20,.95);
+  border-bottom:1px solid var(--border);
+  backdrop-filter:blur(24px);
+  position:sticky;top:0;z-index:200;
+}
+.logo{display:flex;align-items:center;gap:10px;text-decoration:none}
+.logo-icon{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,#3b82f6,#8b5cf6);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#fff;box-shadow:0 0 20px rgba(59,130,246,.35);flex-shrink:0}
+.logo-name{font-size:15px;font-weight:600;color:var(--text);letter-spacing:-.02em}
+.logo-tag{font-size:9px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase}
+.nav{display:flex;gap:2px}
+.nav-btn{padding:6px 14px;border:none;background:transparent;color:var(--muted);font-size:12px;font-family:var(--sans);border-radius:6px;cursor:pointer;transition:all .2s;font-weight:500}
+.nav-btn:hover{color:var(--text);background:var(--glass2)}
+.nav-btn.active{color:var(--blue2);background:rgba(59,130,246,.12)}
+.topbar-r{display:flex;align-items:center;gap:14px}
+.live{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--green2);font-weight:500}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--green2);box-shadow:0 0 8px var(--green);animation:pulse 2s infinite}
+.avatar-btn{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#8b5cf6,#3b82f6);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:#fff;border:none;cursor:pointer}
+.icon-btn{width:32px;height:32px;border-radius:8px;border:1px solid var(--border);background:var(--glass);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--muted);transition:all .2s;font-size:15px}
+.icon-btn:hover{border-color:var(--border2);color:var(--text)}
+
+/* ── Main ── */
+.main{flex:1;padding:24px 28px;display:flex;flex-direction:column;gap:20px;max-width:1400px;width:100%;margin:0 auto}
+
+/* ── Section label ── */
+.section-lbl{font-size:10px;font-weight:600;color:var(--dim);text-transform:uppercase;letter-spacing:.1em;margin-bottom:12px}
+
+/* ── KPI cards ── */
+.kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.kpi{
+  background:var(--glass);border:1px solid var(--border);border-radius:16px;padding:18px 20px;
+  position:relative;overflow:hidden;cursor:default;
+  transition:border-color .25s,transform .25s,box-shadow .25s;
+  animation:fadeUp .5s ease both;
+}
+.kpi:nth-child(1){animation-delay:.04s}.kpi:nth-child(2){animation-delay:.08s}.kpi:nth-child(3){animation-delay:.12s}.kpi:nth-child(4){animation-delay:.16s}
+.kpi:hover{border-color:var(--border2);transform:translateY(-3px);box-shadow:0 12px 40px rgba(0,0,0,.3)}
+.kpi::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.1),transparent)}
+.kpi-glow{position:absolute;top:-20px;right:-20px;width:100px;height:100px;border-radius:50%;filter:blur(35px);opacity:.12;pointer-events:none}
+.kpi-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.kpi-lbl{font-size:11px;color:var(--muted);font-weight:500;letter-spacing:.04em}
+.kpi-ico{width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:14px}
+.kpi-val{font-size:28px;font-weight:700;font-family:var(--mono);letter-spacing:-.03em;line-height:1;transition:color .3s}
+.kpi-sub{margin-top:7px;font-size:11px;color:var(--muted);display:flex;align-items:center;gap:5px}
+.badge{font-size:10px;font-weight:600;padding:2px 7px;border-radius:4px}
+.up{color:var(--green2);background:rgba(16,185,129,.12)}.dn{color:var(--red);background:rgba(239,68,68,.12)}.warn{color:var(--amber);background:rgba(245,158,11,.12)}
+
+/* ── Glass card ── */
+.card{background:var(--glass);border:1px solid var(--border);border-radius:16px;padding:20px;transition:border-color .2s}
+.card:hover{border-color:rgba(255,255,255,.11)}
+.card-title{font-size:13px;font-weight:600;color:var(--text)}
+.card-sub{font-size:11px;color:var(--muted);margin-top:2px}
+
+/* ── Chart row ── */
+.chart-row{display:grid;grid-template-columns:1fr 360px;gap:16px}
+
+/* ── Tabs ── */
+.tabs{display:flex;gap:2px;background:rgba(0,0,0,.35);border-radius:8px;padding:3px}
+.tab{padding:5px 13px;border:none;background:transparent;color:var(--muted);font-size:11px;font-family:var(--sans);border-radius:6px;cursor:pointer;transition:all .2s;font-weight:500}
+.tab.on{background:rgba(59,130,246,.2);color:var(--blue2)}
+
+/* ── Chart SVG ── */
+.chart-wrap{margin-top:16px;position:relative;height:180px}
+.chart-wrap svg{width:100%;height:100%;overflow:visible}
+.chart-xlabels{display:flex;justify-content:space-between;margin-top:8px;padding:0 4px}
+.chart-xlabels span{font-size:10px;color:var(--dim);font-family:var(--mono)}
+
+/* ── Transaction list ── */
+.txn-list{display:flex;flex-direction:column;gap:0}
+.txn{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.04)}
+.txn:last-child{border:none}
+.txn-av{width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;flex-shrink:0}
+.txn-info{flex:1;min-width:0}
+.txn-name{font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.txn-meta{font-size:10px;color:var(--muted);margin-top:1px}
+.txn-amt{font-family:var(--mono);font-size:12px;font-weight:600;white-space:nowrap}
+
+/* ── Bottom grid ── */
+.bottom-row{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+
+/* ── Bar chart ── */
+.bar-chart{height:110px;display:flex;align-items:flex-end;gap:4px;margin-top:14px}
+.bar-col{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px}
+.bar{width:100%;border-radius:4px 4px 0 0;transform-origin:bottom center;animation:barGrow .7s cubic-bezier(.34,1.56,.64,1) both}
+.bar-lbl{font-size:9px;color:var(--dim);font-family:var(--mono)}
+
+/* ── Fraud bars ── */
+.fraud-row{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.fraud-lbl{font-size:11px;color:var(--muted);width:70px;flex-shrink:0}
+.fraud-bg{flex:1;height:6px;background:rgba(255,255,255,.06);border-radius:3px;overflow:hidden}
+.fraud-fill{height:100%;border-radius:3px;transition:width 1.2s cubic-bezier(.34,1.56,.64,1)}
+.fraud-pct{font-size:10px;font-family:var(--mono);color:var(--muted);width:26px;text-align:right}
+
+/* ── Service status ── */
+.svc-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px}
+.svc{display:flex;align-items:center;gap:8px;padding:9px 11px;background:rgba(0,0,0,.2);border-radius:9px;border:1px solid var(--border)}
+.svc-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.svc-name{font-size:11px;font-weight:500;flex:1}
+.svc-ping{font-size:10px;font-family:var(--mono);color:var(--muted)}
+
+/* ── Auth overlay ── */
+.auth-overlay{position:fixed;inset:0;background:rgba(8,12,20,.97);display:flex;align-items:center;justify-content:center;z-index:999;backdrop-filter:blur(12px)}
+.auth-box{background:rgba(13,18,32,.95);border:1px solid var(--border2);border-radius:20px;padding:36px 32px;width:100%;max-width:400px;box-shadow:0 32px 80px rgba(0,0,0,.6)}
+.auth-logo{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+.auth-sub{font-size:12px;color:var(--muted);margin-bottom:28px}
+.auth-tabs{display:flex;background:rgba(0,0,0,.4);border-radius:9px;padding:3px;margin-bottom:22px}
+.auth-tab{flex:1;padding:7px;border:none;background:transparent;color:var(--muted);font-size:12px;font-family:var(--sans);font-weight:500;border-radius:7px;cursor:pointer;transition:all .2s}
+.auth-tab.on{background:rgba(59,130,246,.2);color:var(--blue2)}
+.field{margin-bottom:14px}
+.field label{display:block;font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px}
+.field input{width:100%;padding:10px 13px;background:rgba(0,0,0,.3);border:1px solid var(--border2);border-radius:9px;color:var(--text);font-size:13px;font-family:var(--sans);outline:none;transition:border-color .2s}
+.field input:focus{border-color:var(--blue)}
+.field input::placeholder{color:var(--dim)}
+.btn-primary{width:100%;padding:11px;background:linear-gradient(135deg,#3b82f6,#6366f1);border:none;border-radius:10px;color:#fff;font-size:13px;font-weight:600;font-family:var(--sans);cursor:pointer;margin-top:4px;transition:all .2s;letter-spacing:.01em}
+.btn-primary:hover{opacity:.9;transform:translateY(-1px)}
+.btn-primary:active{transform:translateY(0)}
+.auth-alert{padding:10px 13px;border-radius:8px;font-size:12px;margin-bottom:12px}
+.err{background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);color:#fca5a5}
+.suc{background:rgba(16,185,129,.12);border:1px solid rgba(16,185,129,.3);color:#6ee7b7}
+.hidden{display:none!important}
+
+/* ── Quick action modal ── */
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:500;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(6px)}
+.modal{background:#0d1220;border:1px solid var(--border2);border-radius:18px;padding:28px;width:100%;max-width:380px;box-shadow:0 30px 80px rgba(0,0,0,.5)}
+.modal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px}
+.modal-title{font-size:15px;font-weight:600}
+.modal-close{background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer;line-height:1}
+.modal-close:hover{color:var(--text)}
+.quick-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:20px}
+.quick-btn{padding:14px 10px;background:var(--glass2);border:1px solid var(--border);border-radius:11px;color:var(--text);font-family:var(--sans);font-size:12px;font-weight:500;cursor:pointer;text-align:center;transition:all .2s}
+.quick-btn:hover{border-color:var(--border2);background:rgba(59,130,246,.1);color:var(--blue2)}
+.quick-btn i{display:block;font-size:20px;margin-bottom:6px;color:var(--blue2)}
+</style>
+</head>
+<body>
+
+<!-- Auth Overlay -->
+<div class="auth-overlay" id="authOverlay">
+  <div class="auth-box">
+    <div class="auth-logo">
+      <div class="logo-icon">PV</div>
+      <div>
+        <div class="logo-name">PayVault</div>
+        <div class="logo-tag">Enterprise Console</div>
+      </div>
+    </div>
+    <div class="auth-sub">Secure digital wallet platform</div>
+    <div id="authAlert" class="auth-alert hidden"></div>
+    <div class="auth-tabs">
+      <button class="auth-tab on" onclick="switchAuth('login')">Sign In</button>
+      <button class="auth-tab" onclick="switchAuth('register')">Register</button>
+    </div>
+    <div id="loginForm">
+      <div class="field"><label>Email</label><input type="email" id="li-email" placeholder="you@company.com"/></div>
+      <div class="field"><label>Password</label><input type="password" id="li-pass" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()"/></div>
+      <button class="btn-primary" onclick="doLogin()">Sign In →</button>
+    </div>
+    <div id="registerForm" class="hidden">
+      <div class="field"><label>Full Name</label><input type="text" id="rg-name" placeholder="Arjun Sharma"/></div>
+      <div class="field"><label>Email</label><input type="email" id="rg-email" placeholder="you@company.com"/></div>
+      <div class="field"><label>Phone</label><input type="tel" id="rg-phone" placeholder="9876543210"/></div>
+      <div class="field"><label>Password (min 8 chars + number)</label><input type="password" id="rg-pass" placeholder="••••••••"/></div>
+      <button class="btn-primary" onclick="doRegister()">Create Account →</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add Money Modal -->
+<div class="modal-bg hidden" id="addModal">
+  <div class="modal">
+    <div class="modal-head"><div class="modal-title">Add Money</div><button class="modal-close" onclick="closeModal('addModal')">✕</button></div>
+    <div id="addAlert" class="auth-alert hidden"></div>
+    <div class="field"><label>Amount (₹)</label><input type="number" id="add-amt" placeholder="1000" min="1" max="100000"/></div>
+    <div class="quick-grid">
+      <button class="quick-btn" onclick="document.getElementById('add-amt').value=500">₹500</button>
+      <button class="quick-btn" onclick="document.getElementById('add-amt').value=1000">₹1,000</button>
+      <button class="quick-btn" onclick="document.getElementById('add-amt').value=5000">₹5,000</button>
+      <button class="quick-btn" onclick="document.getElementById('add-amt').value=10000">₹10,000</button>
+    </div>
+    <button class="btn-primary" onclick="doAddMoney()">Add Money ✓</button>
+  </div>
+</div>
+
+<!-- Transfer Modal -->
+<div class="modal-bg hidden" id="txnModal">
+  <div class="modal">
+    <div class="modal-head"><div class="modal-title">Send Money</div><button class="modal-close" onclick="closeModal('txnModal')">✕</button></div>
+    <div id="txnAlert" class="auth-alert hidden"></div>
+    <div class="field"><label>Recipient Phone</label><input type="tel" id="tx-phone" placeholder="9876543210"/></div>
+    <div class="field"><label>Amount (₹)</label><input type="number" id="tx-amt" placeholder="500" min="1" max="50000"/></div>
+    <div class="field"><label>Note (optional)</label><input type="text" id="tx-note" placeholder="Dinner, rent, etc."/></div>
+    <button class="btn-primary" onclick="doTransfer()">Send Money ↗</button>
+  </div>
+</div>
+
+<!-- App Shell -->
+<div class="app" id="appShell" style="display:none">
+  <div class="topbar">
+    <div class="logo">
+      <div class="logo-icon">PV</div>
+      <div>
+        <div class="logo-name">PayVault</div>
+        <div class="logo-tag">Enterprise Console</div>
+      </div>
+    </div>
+    <nav class="nav">
+      <button class="nav-btn active" onclick="activateNav(this,'dashboard')">Overview</button>
+      <button class="nav-btn" onclick="activateNav(this,'transactions')">Transactions</button>
+      <button class="nav-btn" onclick="activateNav(this,'security')">Security</button>
+    </nav>
+    <div class="topbar-r">
+      <div class="live"><div class="dot"></div>Live</div>
+      <button class="icon-btn" title="Notifications">🔔</button>
+      <button class="avatar-btn" id="userAvatar" title="Account">JR</button>
+      <button class="nav-btn" onclick="doLogout()" style="font-size:11px">Sign out</button>
+    </div>
+  </div>
+
+  <!-- DASHBOARD -->
+  <div class="main" id="view-dashboard">
+    <div>
+      <div class="section-lbl">Wallet Overview</div>
+      <div class="kpi-grid">
+        <div class="kpi">
+          <div class="kpi-glow" style="background:#3b82f6"></div>
+          <div class="kpi-top">
+            <div class="kpi-lbl">Available Balance</div>
+            <div class="kpi-ico" style="background:rgba(59,130,246,.15);color:#60a5fa">💳</div>
+          </div>
+          <div class="kpi-val" id="kpi-bal">₹0.00</div>
+          <div class="kpi-sub"><span class="badge up">Active</span> wallet</div>
+        </div>
+        <div class="kpi" style="cursor:pointer" onclick="openModal('addModal')">
+          <div class="kpi-glow" style="background:#10b981"></div>
+          <div class="kpi-top">
+            <div class="kpi-lbl">Add Money</div>
+            <div class="kpi-ico" style="background:rgba(16,185,129,.15);color:#34d399">➕</div>
+          </div>
+          <div class="kpi-val" style="font-size:16px;color:var(--green2);margin-top:4px">Tap to top up</div>
+          <div class="kpi-sub"><span class="badge up">Instant</span> transfer</div>
+        </div>
+        <div class="kpi" style="cursor:pointer" onclick="openModal('txnModal')">
+          <div class="kpi-glow" style="background:#8b5cf6"></div>
+          <div class="kpi-top">
+            <div class="kpi-lbl">Send Money</div>
+            <div class="kpi-ico" style="background:rgba(139,92,246,.15);color:#a78bfa">↗️</div>
+          </div>
+          <div class="kpi-val" style="font-size:16px;color:#a78bfa;margin-top:4px">Tap to transfer</div>
+          <div class="kpi-sub"><span class="badge up">Secure</span> P2P</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-glow" style="background:#f59e0b"></div>
+          <div class="kpi-top">
+            <div class="kpi-lbl">Fraud Protection</div>
+            <div class="kpi-ico" style="background:rgba(245,158,11,.15);color:#fbbf24">🛡️</div>
+          </div>
+          <div class="kpi-val" style="color:var(--green2)">Active</div>
+          <div class="kpi-sub"><span class="badge up">AI-powered</span> monitoring</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="chart-row">
+      <div class="card" style="animation:fadeUp .4s .2s ease both">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <div><div class="card-title">Transaction History</div><div class="card-sub">Your recent activity</div></div>
+          <div class="tabs">
+            <button class="tab on">All</button>
+            <button class="tab">Credits</button>
+            <button class="tab">Debits</button>
+          </div>
+        </div>
+        <div class="chart-wrap">
+          <svg id="txn-chart" viewBox="0 0 560 160" preserveAspectRatio="none">
+            <defs>
+              <linearGradient id="ag" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#3b82f6" stop-opacity=".2"/>
+                <stop offset="100%" stop-color="#3b82f6" stop-opacity="0"/>
+              </linearGradient>
+              <linearGradient id="lg" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0%" stop-color="#6366f1"/>
+                <stop offset="50%" stop-color="#3b82f6"/>
+                <stop offset="100%" stop-color="#06b6d4"/>
+              </linearGradient>
+            </defs>
+            <path id="chart-area" fill="url(#ag)"/>
+            <path id="chart-line" fill="none" stroke="url(#lg)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="stroke-dasharray:2000;stroke-dashoffset:2000;animation:lineGrow 1.5s ease .4s forwards"/>
+          </svg>
+        </div>
+        <div class="chart-xlabels" id="chart-xlabels"></div>
+      </div>
+
+      <div class="card" style="animation:fadeUp .4s .3s ease both">
+        <div class="card-title">Recent Activity</div>
+        <div style="margin-top:14px" id="live-txns">
+          <div style="color:var(--muted);font-size:12px;text-align:center;padding:20px 0">Make your first transaction to see activity here</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="bottom-row">
+      <div class="card" style="animation:fadeUp .4s .35s ease both">
+        <div class="card-title">Hourly Activity</div>
+        <div class="card-sub">Transactions by hour</div>
+        <div class="bar-chart" id="bar-chart"></div>
+      </div>
+      <div class="card" style="animation:fadeUp .4s .4s ease both">
+        <div class="card-title">Fraud Risk Monitor</div>
+        <div class="card-sub">Transaction risk distribution</div>
+        <div style="margin-top:14px" id="fraud-bars">
+          <div class="fraud-row"><div class="fraud-lbl">Low risk</div><div class="fraud-bg"><div class="fraud-fill" style="width:0%;background:var(--green2)" data-w="78"></div></div><div class="fraud-pct">78%</div></div>
+          <div class="fraud-row"><div class="fraud-lbl">Med risk</div><div class="fraud-bg"><div class="fraud-fill" style="width:0%;background:var(--amber)" data-w="16"></div></div><div class="fraud-pct">16%</div></div>
+          <div class="fraud-row"><div class="fraud-lbl">High risk</div><div class="fraud-bg"><div class="fraud-fill" style="width:0%;background:#f87171" data-w="5"></div></div><div class="fraud-pct">5%</div></div>
+          <div class="fraud-row"><div class="fraud-lbl">Blocked</div><div class="fraud-bg"><div class="fraud-fill" style="width:0%;background:var(--red)" data-w="1"></div></div><div class="fraud-pct">1%</div></div>
+        </div>
+      </div>
+      <div class="card" style="animation:fadeUp .4s .45s ease both">
+        <div class="card-title">Service Health</div>
+        <div class="card-sub">All systems operational</div>
+        <div class="svc-grid">
+          <div class="svc"><div class="svc-dot" style="background:var(--green2);box-shadow:0 0 6px var(--green)"></div><div class="svc-name">Backend API</div><div class="svc-ping">12ms</div></div>
+          <div class="svc"><div class="svc-dot" style="background:var(--green2);box-shadow:0 0 6px var(--green)"></div><div class="svc-name">Notifications</div><div class="svc-ping">8ms</div></div>
+          <div class="svc"><div class="svc-dot" style="background:var(--green2);box-shadow:0 0 6px var(--green)"></div><div class="svc-name">Vault</div><div class="svc-ping">4ms</div></div>
+          <div class="svc"><div class="svc-dot" style="background:var(--green2);box-shadow:0 0 6px var(--green)"></div><div class="svc-name">Prometheus</div><div class="svc-ping">6ms</div></div>
+          <div class="svc"><div class="svc-dot" style="background:var(--green2);box-shadow:0 0 6px var(--green)"></div><div class="svc-name">ELK Stack</div><div class="svc-ping">18ms</div></div>
+          <div class="svc"><div class="svc-dot" style="background:var(--green2);box-shadow:0 0 6px var(--green)"></div><div class="svc-name">Kubernetes</div><div class="svc-ping">—</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TRANSACTIONS VIEW -->
+  <div class="main hidden" id="view-transactions">
+    <div class="section-lbl">Transaction History</div>
+    <div class="card">
+      <div id="full-txns" style="min-height:200px"></div>
+    </div>
+  </div>
+
+  <!-- SECURITY VIEW -->
+  <div class="main hidden" id="view-security">
+    <div class="section-lbl">Security & Audit</div>
+    <div class="card">
+      <div id="audit-log" style="min-height:200px"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = 'http://localhost:8000';
+let token = null, user = null, txns = [];
+
+function showAlert(id, msg, type='err'){
+  const el = document.getElementById(id);
+  el.textContent = msg;
+  el.className = 'auth-alert ' + type;
+  el.classList.remove('hidden');
+}
+function hideAlert(id){ document.getElementById(id).classList.add('hidden'); }
+
+function switchAuth(tab){
+  document.getElementById('loginForm').classList.toggle('hidden', tab!=='login');
+  document.getElementById('registerForm').classList.toggle('hidden', tab!=='register');
+  document.querySelectorAll('.auth-tab').forEach((b,i)=>b.classList.toggle('on',(i===0&&tab==='login')||(i===1&&tab==='register')));
+  hideAlert('authAlert');
+}
+
+async function doLogin(){
+  const email=document.getElementById('li-email').value.trim();
+  const pass=document.getElementById('li-pass').value;
+  if(!email||!pass){showAlert('authAlert','Please fill in all fields');return;}
+  try{
+    const r=await fetch(`${API}/api/login`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password:pass})});
+    const d=await r.json();
+    if(!r.ok){showAlert('authAlert',d.detail||'Login failed');return;}
+    token=d.access_token; user=d.user;
+    enterApp();
+  }catch(e){showAlert('authAlert','Cannot connect to backend. Is it running on port 8000?');}
+}
+
+async function doRegister(){
+  const name=document.getElementById('rg-name').value.trim();
+  const email=document.getElementById('rg-email').value.trim();
+  const phone=document.getElementById('rg-phone').value.trim();
+  const pass=document.getElementById('rg-pass').value;
+  if(!name||!email||!phone||!pass){showAlert('authAlert','Please fill in all fields');return;}
+  try{
+    const r=await fetch(`${API}/api/register`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,email,phone,password:pass})});
+    const d=await r.json();
+    if(!r.ok){showAlert('authAlert',d.detail||'Registration failed');return;}
+    showAlert('authAlert','Account created! Please sign in.','suc');
+    switchAuth('login');
+    document.getElementById('li-email').value=email;
+  }catch(e){showAlert('authAlert','Cannot connect to backend.');}
+}
+
+function enterApp(){
+  document.getElementById('authOverlay').style.display='none';
+  document.getElementById('appShell').style.display='flex';
+  const initials=user.name.split(' ').map(w=>w[0]).join('').substring(0,2).toUpperCase();
+  document.getElementById('userAvatar').textContent=initials;
+  initCharts();
+  loadData();
+}
+
+function doLogout(){
+  token=null; user=null; txns=[];
+  document.getElementById('authOverlay').style.display='flex';
+  document.getElementById('appShell').style.display='none';
+}
+
+function activateNav(btn, view){
+  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  ['dashboard','transactions','security'].forEach(v=>{
+    const el=document.getElementById('view-'+v);
+    if(el) el.classList.toggle('hidden', v!==view);
+  });
+  if(view==='transactions') renderFullTxns();
+  if(view==='security') loadAudit();
+}
+
+function openModal(id){ document.getElementById(id).classList.remove('hidden'); }
+function closeModal(id){ document.getElementById(id).classList.add('hidden'); hideAlert(id.replace('Modal','Alert').replace('add','add').replace('txn','txn')); }
+
+async function api(path, opts={}){
+  return fetch(`${API}${path}`,{...opts,headers:{'Content-Type':'application/json','Authorization':`Bearer ${token}`,...(opts.headers||{})}});
+}
+
+async function loadData(){
+  try{
+    const [wr,tr] = await Promise.all([api('/api/wallet'), api('/api/wallet/transactions?limit=20')]);
+    const wallet = await wr.json();
+    txns = await tr.json();
+    document.getElementById('kpi-bal').textContent = '₹' + Number(wallet.balance).toLocaleString('en-IN',{minimumFractionDigits:2});
+    renderRecentTxns();
+    updateChart();
+    animateFraudBars();
+  }catch(e){console.error(e);}
+}
+
+async function doAddMoney(){
+  const amount=parseFloat(document.getElementById('add-amt').value);
+  if(!amount||amount<=0){showAlert('addAlert','Enter a valid amount');return;}
+  try{
+    const r=await api('/api/wallet/add-money',{method:'POST',body:JSON.stringify({amount})});
+    const d=await r.json();
+    if(!r.ok){showAlert('addAlert',d.detail||'Failed');return;}
+    showAlert('addAlert',`₹${amount.toLocaleString('en-IN')} added successfully!`,'suc');
+    document.getElementById('add-amt').value='';
+    setTimeout(()=>{ closeModal('addModal'); loadData(); },1200);
+  }catch(e){showAlert('addAlert','Connection error');}
+}
+
+async function doTransfer(){
+  const phone=document.getElementById('tx-phone').value.trim();
+  const amount=parseFloat(document.getElementById('tx-amt').value);
+  const description=document.getElementById('tx-note').value.trim();
+  if(!phone||!amount){showAlert('txnAlert','Fill in recipient and amount');return;}
+  try{
+    const r=await api('/api/wallet/transfer',{method:'POST',body:JSON.stringify({recipient_phone:phone,amount,description})});
+    const d=await r.json();
+    if(!r.ok){showAlert('txnAlert',d.detail||'Transfer failed');return;}
+    showAlert('txnAlert',`₹${amount.toLocaleString('en-IN')} sent to ${d.recipient} ✓`,'suc');
+    document.getElementById('tx-phone').value='';
+    document.getElementById('tx-amt').value='';
+    document.getElementById('tx-note').value='';
+    setTimeout(()=>{ closeModal('txnModal'); loadData(); },1400);
+  }catch(e){showAlert('txnAlert','Connection error');}
+}
+
+function renderRecentTxns(){
+  const el=document.getElementById('live-txns');
+  if(!txns.length){el.innerHTML='<div style="color:var(--muted);font-size:12px;text-align:center;padding:20px 0">No transactions yet</div>';return;}
+  const show=txns.slice(0,6);
+  el.innerHTML=show.map(t=>{
+    const isC=t.type==='credit';
+    const col=isC?'var(--green2)':'#f87171';
+    const bg=isC?'rgba(16,185,129,.15)':'rgba(239,68,68,.15)';
+    const amt=(isC?'+':'-')+'₹'+Number(t.amount).toLocaleString('en-IN',{minimumFractionDigits:2});
+    const date=new Date(t.created_at+'Z').toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
+    const initials=t.description?t.description.substring(0,2).toUpperCase():'TX';
+    const fraudBadge=t.fraud_score>=0.5?`<span style="font-size:9px;color:var(--amber);background:rgba(245,158,11,.15);padding:1px 5px;border-radius:3px;margin-left:4px">⚠ Risk</span>`:'';
+    return `<div class="txn">
+      <div class="txn-av" style="background:${bg};color:${col}">${initials}</div>
+      <div class="txn-info">
+        <div class="txn-name">${t.description||'Transaction'}${fraudBadge}</div>
+        <div class="txn-meta">${t.type} · ${date}</div>
+      </div>
+      <div class="txn-amt" style="color:${col}">${amt}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderFullTxns(){
+  const el=document.getElementById('full-txns');
+  if(!txns.length){el.innerHTML='<div style="color:var(--muted);padding:20px;text-align:center">No transactions yet</div>';return;}
+  el.innerHTML=`<table style="width:100%;border-collapse:collapse">
+    <thead><tr style="border-bottom:1px solid var(--border)">
+      ${['Time','Type','Description','Amount','Balance After','Fraud Score'].map(h=>`<th style="text-align:left;padding:8px 12px;font-size:10px;color:var(--muted);font-weight:500;text-transform:uppercase;letter-spacing:.06em">${h}</th>`).join('')}
+    </tr></thead>
+    <tbody>${txns.map(t=>{
+      const isC=t.type==='credit';
+      const col=isC?'var(--green2)':'#f87171';
+      const fs=t.fraud_score>=0.5?`<span style="color:var(--amber)">${t.fraud_score.toFixed(2)}</span>`:t.fraud_score.toFixed(2);
+      const date=new Date(t.created_at+'Z').toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
+      return `<tr style="border-bottom:1px solid rgba(255,255,255,.04)">
+        <td style="padding:10px 12px;font-size:11px;color:var(--muted);font-family:var(--mono)">${date}</td>
+        <td style="padding:10px 12px"><span style="font-size:10px;font-weight:600;padding:2px 7px;border-radius:4px;background:${isC?'rgba(16,185,129,.12)':'rgba(239,68,68,.12)'};color:${col}">${t.type.toUpperCase()}</span></td>
+        <td style="padding:10px 12px;font-size:12px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.description||'—'}</td>
+        <td style="padding:10px 12px;font-family:var(--mono);font-size:12px;font-weight:600;color:${col}">${(isC?'+':'-')}₹${Number(t.amount).toLocaleString('en-IN',{minimumFractionDigits:2})}</td>
+        <td style="padding:10px 12px;font-family:var(--mono);font-size:12px;color:var(--muted)">₹${Number(t.balance_after).toLocaleString('en-IN',{minimumFractionDigits:2})}</td>
+        <td style="padding:10px 12px;font-family:var(--mono);font-size:11px">${fs}</td>
+      </tr>`;
+    }).join('')}</tbody>
+  </table>`;
+}
+
+async function loadAudit(){
+  try{
+    const r=await api('/api/admin/audit-log');
+    const logs=await r.json();
+    const el=document.getElementById('audit-log');
+    if(!logs.length){el.innerHTML='<div style="color:var(--muted);padding:20px;text-align:center">No audit events yet</div>';return;}
+    el.innerHTML=`<table style="width:100%;border-collapse:collapse">
+      <thead><tr style="border-bottom:1px solid var(--border)">
+        ${['Time','Action','IP Address','Details'].map(h=>`<th style="text-align:left;padding:8px 12px;font-size:10px;color:var(--muted);font-weight:500;text-transform:uppercase;letter-spacing:.06em">${h}</th>`).join('')}
+      </tr></thead>
+      <tbody>${logs.map(l=>{
+        const date=new Date(l.created_at+'Z').toLocaleString('en-IN');
+        const col=l.action.includes('FAILED')||l.action.includes('BLOCKED')?'var(--red)':l.action==='FRAUD_ALERT'?'var(--amber)':'var(--green2)';
+        return `<tr style="border-bottom:1px solid rgba(255,255,255,.04)">
+          <td style="padding:10px 12px;font-size:11px;color:var(--muted);font-family:var(--mono)">${date}</td>
+          <td style="padding:10px 12px"><span style="font-size:10px;font-weight:600;color:${col}">${l.action}</span></td>
+          <td style="padding:10px 12px;font-size:11px;color:var(--muted);font-family:var(--mono)">${l.ip_address||'—'}</td>
+          <td style="padding:10px 12px;font-size:11px;color:var(--muted)">${l.details||'—'}</td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table>`;
+  }catch(e){}
+}
+
+function initCharts(){
+  const bars=[12,8,5,18,42,65,88,74,91,68,55,72];
+  const labels=['10','11','12','13','14','15','16','17','18','19','20','21'];
+  const mx=Math.max(...bars);
+  const bc=document.getElementById('bar-chart');
+  bars.forEach((v,i)=>{
+    const col=document.createElement('div');col.className='bar-col';
+    const bar=document.createElement('div');bar.className='bar';
+    const h=Math.round((v/mx)*95);
+    bar.style.cssText=`height:${h}px;background:linear-gradient(180deg,#3b82f6,#1e40af);animation-delay:${i*.05}s`;
+    const lbl=document.createElement('div');lbl.className='bar-lbl';lbl.textContent=labels[i];
+    col.appendChild(bar);col.appendChild(lbl);bc.appendChild(col);
+  });
+  const xlEl=document.getElementById('chart-xlabels');
+  ['00:00','04:00','08:00','12:00','16:00','20:00','Now'].forEach(h=>{
+    const s=document.createElement('span');s.textContent=h;xlEl.appendChild(s);
+  });
+}
+
+function updateChart(){
+  const pts=txns.length>1?txns.slice().reverse().map(t=>t.amount):[0,0,0,0,0,0,0,0];
+  while(pts.length<8) pts.unshift(0);
+  const W=560,H=160,pad=12;
+  const mn=Math.min(...pts),mx=Math.max(...pts)||1;
+  const coords=pts.map((v,i)=>({x:pad+(i/(pts.length-1))*(W-pad*2),y:H-pad-((v-mn)/(mx-mn+1))*(H-pad*2)}));
+  const lineD=coords.map((p,i)=>i===0?`M${p.x},${p.y}`:`L${p.x},${p.y}`).join(' ');
+  const areaD=lineD+` L${coords[coords.length-1].x},${H} L${coords[0].x},${H} Z`;
+  document.getElementById('chart-line').setAttribute('d',lineD);
+  document.getElementById('chart-area').setAttribute('d',areaD);
+}
+
+function animateFraudBars(){
+  setTimeout(()=>{
+    document.querySelectorAll('.fraud-fill').forEach(b=>{b.style.width=b.dataset.w+'%'});
+  }, 500);
+}
+
+document.querySelectorAll('.modal-bg').forEach(m=>{
+  m.addEventListener('click',e=>{if(e.target===m) m.classList.add('hidden')});
+});
+document.querySelectorAll('.tab').forEach(t=>{
+  t.addEventListener('click',()=>{
+    const parent=t.closest('.tabs');
+    parent.querySelectorAll('.tab').forEach(x=>x.classList.remove('on'));
+    t.classList.add('on');
+  });
+});
+</script>
+</body>
+</html>

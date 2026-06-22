@@ -1,0 +1,76 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wallet-backend
+  namespace: wallet
+  labels:
+    app: wallet-backend
+    version: IMAGE_TAG_PLACEHOLDER
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: wallet-backend
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxSurge: 1, maxUnavailable: 0 }
+  template:
+    metadata:
+      labels:
+        app: wallet-backend
+        version: IMAGE_TAG_PLACEHOLDER
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        fsGroup: 1001
+      containers:
+        - name: wallet-backend
+          image: docker-backend:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: wallet-config
+          env:
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: wallet-secrets
+                  key: JWT_SECRET
+          resources:
+            requests: { cpu: "100m", memory: "128Mi" }
+            limits:   { cpu: "500m", memory: "512Mi" }
+          livenessProbe:
+            httpGet: { path: /health, port: 8000 }
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: { path: /health, port: 8000 }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          volumeMounts:
+            - name: wallet-data
+              mountPath: /app/data
+      volumes:
+        - name: wallet-data
+          persistentVolumeClaim:
+            claimName: wallet-data-pvc
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: wallet-data-pvc
+  namespace: wallet
+spec:
+  accessModes: [ReadWriteOnce]
+  # storageClassName: gp2  # AWS-only; omit to use cluster default (e.g. local kind/Docker Desktop)
+  resources:
+    requests:
+      storage: 5Gi

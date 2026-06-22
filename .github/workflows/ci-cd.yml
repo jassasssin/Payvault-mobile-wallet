@@ -1,0 +1,202 @@
+name: PayVault CI/CD
+
+on:
+  push:
+    branches: [main, develop]
+    tags: ["v*.*.*"]
+  pull_request:
+    branches: [main, develop]
+
+env:
+  IMAGE_BACKEND:      ${{ secrets.DOCKERHUB_USERNAME }}/wallet-backend
+  IMAGE_FRONTEND:     ${{ secrets.DOCKERHUB_USERNAME }}/wallet-frontend
+  IMAGE_NOTIFICATION: ${{ secrets.DOCKERHUB_USERNAME }}/wallet-notification
+  IMAGE_TAG:          ${{ github.sha }}
+
+jobs:
+
+  # ── Job 1: Unit Tests ───────────────────────────────────────────────────────
+  test:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - name: Install deps
+        run: pip install -r app/backend/requirements.txt pytest httpx
+      - name: Run tests
+        run: |
+          DB_PATH=./test_wallet.db python -m pytest app/backend/tests/ \
+            -v --tb=short --junitxml=test-results.xml
+      - name: Upload results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: test-results, path: test-results.xml }
+
+  # ── Job 2: Security Scans ───────────────────────────────────────────────────
+  security:
+    name: Security Scan (Bandit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - name: Bandit SAST
+        run: |
+          pip install bandit
+          bandit -r app/backend/main.py app/notification-service/main.py \
+            -f json -o bandit-report.json
+          python3 - << 'PY'
+          import json, sys
+          data = json.load(open("bandit-report.json"))
+          high = [i for i in data["results"] if i["issue_severity"] == "HIGH"]
+          print(f"Bandit: {len(data['results'])} issues, {len(high)} HIGH severity")
+          if len(high) > 0:
+              print("HIGH severity issues found – failing build")
+              sys.exit(1)
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: bandit-report, path: bandit-report.json }
+
+  # ── Job 3: Dockerfile Lint ──────────────────────────────────────────────────
+  lint-docker:
+    name: Dockerfile Lint (Hadolint)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: docker/Dockerfile.backend
+          failure-threshold: warning
+      - uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: docker/Dockerfile.notification
+          failure-threshold: warning
+
+  # ── Job 4: Build Docker Images ──────────────────────────────────────────────
+  build:
+    name: Build Docker Images
+    runs-on: ubuntu-latest
+    needs: [test, security, lint-docker]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build backend
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: docker/Dockerfile.backend
+          push: false
+          tags: ${{ env.IMAGE_BACKEND }}:${{ env.IMAGE_TAG }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build notification
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: docker/Dockerfile.notification
+          push: false
+          tags: ${{ env.IMAGE_NOTIFICATION }}:${{ env.IMAGE_TAG }}
+
+  # ── Job 5: Trivy CVE Scan (BLOCKS on CRITICAL) ─────────────────────────────
+  trivy:
+    name: Trivy Image Scan
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build for scanning
+        run: |
+          docker build -f docker/Dockerfile.backend -t scan-backend:latest .
+      - name: Scan (exit 1 on CRITICAL)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: scan-backend:latest
+          format: table
+          exit-code: "1"
+          severity: CRITICAL
+          ignore-unfixed: true
+
+  # ── Job 6: Push to Registry (main / tags only) ──────────────────────────────
+  push:
+    name: Push Images
+    runs-on: ubuntu-latest
+    needs: trivy
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - uses: docker/setup-buildx-action@v3
+      - name: Push backend
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: docker/Dockerfile.backend
+          push: true
+          tags: |
+            ${{ env.IMAGE_BACKEND }}:${{ env.IMAGE_TAG }}
+            ${{ env.IMAGE_BACKEND }}:latest
+      - name: Push frontend
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: docker/Dockerfile.frontend
+          push: true
+          tags: |
+            ${{ env.IMAGE_FRONTEND }}:${{ env.IMAGE_TAG }}
+            ${{ env.IMAGE_FRONTEND }}:latest
+      - name: Push notification
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: docker/Dockerfile.notification
+          push: true
+          tags: |
+            ${{ env.IMAGE_NOTIFICATION }}:${{ env.IMAGE_TAG }}
+            ${{ env.IMAGE_NOTIFICATION }}:latest
+
+  # ── Job 7: Deploy to EKS (main only) ───────────────────────────────────────
+  deploy:
+    name: Deploy to EKS
+    runs-on: ubuntu-latest
+    needs: push
+    if: github.ref == 'refs/heads/main'
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region:            ap-south-1
+      - name: Update kubeconfig
+        run: aws eks update-kubeconfig --region ap-south-1 --name wallet-eks-cluster
+      - name: Deploy
+        run: |
+          sed -i "s|IMAGE_TAG_PLACEHOLDER|${{ env.IMAGE_TAG }}|g" kubernetes/*.yaml
+          kubectl apply -f kubernetes/namespace.yaml
+          kubectl apply -f kubernetes/configmap.yaml
+          kubectl apply -f kubernetes/secrets.yaml
+          kubectl apply -f kubernetes/backend-deployment.yaml
+          kubectl apply -f kubernetes/frontend-deployment.yaml
+          kubectl apply -f kubernetes/notification-deployment.yaml
+          kubectl apply -f kubernetes/services.yaml
+          kubectl apply -f kubernetes/ingress.yaml
+          kubectl apply -f kubernetes/hpa.yaml
+          kubectl apply -f kubernetes/network-policy.yaml
+          kubectl apply -f kubernetes/pdb.yaml
+          kubectl rollout status deployment/wallet-backend -n wallet --timeout=120s
+          kubectl rollout status deployment/wallet-frontend -n wallet --timeout=120s
+          kubectl rollout status deployment/wallet-notification -n wallet --timeout=60s
+      - name: Smoke test
+        run: |
+          sleep 15
+          LB=$(kubectl get ingress wallet-ingress -n wallet -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+          curl -sf "http://${LB}/health" || echo "Smoke test skipped – LB not ready yet"

@@ -1,0 +1,54 @@
+# ─── Frontend Deployment ─────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wallet-frontend
+  namespace: wallet
+  labels:
+    app: wallet-frontend
+    version: IMAGE_TAG_PLACEHOLDER
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: wallet-frontend
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: wallet-frontend
+        version: IMAGE_TAG_PLACEHOLDER
+    spec:
+      containers:
+        - name: wallet-frontend
+          image: docker-frontend:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 80
+              name: http
+
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "128Mi"
+
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 80
+            initialDelaySeconds: 10
+            periodSeconds: 15
+
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 10

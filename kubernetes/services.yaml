@@ -1,0 +1,79 @@
+# ─── Services ────────────────────────────────────────────────────────────────
+
+# Backend Service (ClusterIP – internal only, accessed via Ingress)
+apiVersion: v1
+kind: Service
+metadata:
+  name: wallet-backend-svc
+  namespace: wallet
+  labels:
+    app: wallet-backend
+spec:
+  selector:
+    app: wallet-backend
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8000
+      protocol: TCP
+  type: ClusterIP
+
+---
+# Frontend Service (ClusterIP – served via Ingress)
+apiVersion: v1
+kind: Service
+metadata:
+  name: wallet-frontend-svc
+  namespace: wallet
+  labels:
+    app: wallet-frontend
+spec:
+  selector:
+    app: wallet-frontend
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80
+      protocol: TCP
+  type: ClusterIP
+
+---
+# ─── Ingress (AWS ALB via ingress-nginx) ─────────────────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: wallet-ingress
+  namespace: wallet
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    # AWS ALB annotations (uncomment for production)
+    # kubernetes.io/ingress.class: alb
+    # alb.ingress.kubernetes.io/scheme: internet-facing
+    # alb.ingress.kubernetes.io/target-type: ip
+    # alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:ap-south-1:ACCOUNT:certificate/CERT-ID
+spec:
+  rules:
+    - host: wallet.yourdomain.com        # ← Change this
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: wallet-backend-svc
+                port:
+                  number: 80
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: wallet-frontend-svc
+                port:
+                  number: 80
+  tls:
+    - hosts:
+        - wallet.yourdomain.com
+      secretName: wallet-tls-secret

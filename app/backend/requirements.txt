@@ -1,0 +1,9 @@
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+pyjwt==2.9.0
+pydantic[email]==2.9.2
+python-multipart==0.0.12
+bcrypt==4.2.0
+slowapi==0.1.9
+prometheus-client==0.21.0
+python-dotenv==1.0.1
